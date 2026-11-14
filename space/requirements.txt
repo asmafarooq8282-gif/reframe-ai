@@ -1,0 +1,5 @@
+# Phase 0: only what the hello app needs. Model libraries (diffusers,
+# transformers, accelerate...) are added in Phase 1 and pinned once working.
+# gradio and spaces are installed by the Space itself (see README.md sdk_version).
+torch>=2.8
+pillow

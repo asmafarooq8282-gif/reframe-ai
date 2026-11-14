@@ -1,0 +1,61 @@
+name: Sync to Hugging Face Space
+
+# Pushes the space/ folder to the Hugging Face Space whenever it changes.
+# Needs two things in GitHub → Settings → Secrets and variables → Actions:
+#   Secret   HF_TOKEN     a Hugging Face token with write access
+#   Variable HF_SPACE_ID  e.g.  your-hf-username/reframe-ai
+# Until both exist, this workflow skips itself (it does not fail).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "space/**"
+      - ".github/workflows/sync-space.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: sync-space
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HF_SPACE_ID: ${{ vars.HF_SPACE_ID }}
+    steps:
+      - name: Check configuration
+        id: cfg
+        run: |
+          if [ -n "$HF_TOKEN" ] && [ -n "$HF_SPACE_ID" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping: add the HF_TOKEN secret and HF_SPACE_ID variable (see docs/SETUP.md)."
+          fi
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.ready == 'true'
+      - uses: actions/setup-python@v5
+        if: steps.cfg.outputs.ready == 'true'
+        with:
+          python-version: "3.12"
+      - name: Upload space/ to the Space
+        if: steps.cfg.outputs.ready == 'true'
+        run: |
+          pip install -q huggingface_hub
+          python - <<'EOF'
+          import os
+          from huggingface_hub import upload_folder
+
+          upload_folder(
+              folder_path="space",
+              repo_id=os.environ["HF_SPACE_ID"],
+              repo_type="space",
+              token=os.environ["HF_TOKEN"],
+              commit_message=f"Sync from GitHub {os.environ['GITHUB_SHA'][:7]}",
+              ignore_patterns=["tests/*", "tests/**", "**/__pycache__/**", "*.pyc"],
+              delete_patterns=["*.py", "pipelines/*", "utils/*"],
+          )
+          print("Synced to https://huggingface.co/spaces/" + os.environ["HF_SPACE_ID"])
+          EOF

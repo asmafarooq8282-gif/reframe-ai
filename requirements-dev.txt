@@ -1,0 +1,4 @@
+# For local development and CI (CPU only, no models)
+gradio==6.32.0
+pillow
+pytest

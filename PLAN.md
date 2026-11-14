@@ -300,11 +300,19 @@ numpy
 > Fable: tick each box when done. A phase is done only when **all** its tests pass.
 
 ### Phase 0 — Setup (owner + Fable, ~30 min)
-- [ ] Verify everything in §13 and update this file if anything changed.
-- [ ] Create folder layout, `.gitignore`, `tests.yml` CI.
-- [ ] Owner creates the HF Space (§14) and adds `HF_TOKEN` as a GitHub secret.
-- [ ] `sync-space.yml` pushes `space/` to the Space on every push to `main`.
-- **Test:** pushing a trivial `app.py` ("Hello") makes the Space show it.
+- [x] Verify everything in §13 and update this file if anything changed. *(14 Nov 2026 — see "Phase 0 findings" below)*
+- [x] Create folder layout, `.gitignore`, `tests.yml` CI.
+- [ ] Owner creates the HF Space (§14) and adds the `HF_TOKEN` secret **and the `HF_SPACE_ID` variable** on GitHub — steps in `docs/SETUP.md`.
+- [x] `sync-space.yml` pushes `space/` to the Space on every push to `main` (skips itself until the secret and variable exist).
+- **Test:** pushing a trivial `app.py` ("Hello") makes the Space show it. *(Hello app passes locally and in CI; the Space half waits on the owner step above.)*
+
+**Phase 0 findings (for Phase 1+):**
+- FLUX.2 klein 4B: repo live, Apache 2.0, not gated. Diffusers class **`Flux2KleinPipeline`**, 4 steps, `guidance_scale=1.0`, needs diffusers from GitHub main. The model card shows single-image editing via `image=`; **how to pass several reference images isn't on the card — confirm in the diffusers docs / `black-forest-labs/flux2` repo first thing in Phase 1.**
+- Qwen-Image-Edit-2511: repo live, Apache 2.0. Class **`QwenImageEditPlusPipeline`**, images passed as a **list** under `image=`; card defaults are 40 steps, `true_cfg_scale=4.0` (Lightning LoRA brings it to 4 steps).
+- Kiwi-Edit: model page couldn't be opened from the build session; details from search still stand (custom `pipeline_kiwi_edit.py`, wants `transformers==4.57.0`, `decord`, `einops`, `av`). Re-check at the start of Phase 3.
+- Gradio is now **6.x** (Space pinned to 6.32.0). The §9 skeleton was written for 5.x — check `gr.ImageSlider` and Gallery-as-input behaviour in 6.x in Phase 1.
+- A ZeroGPU Space must contain at least one `@spaces.GPU` function, so the hello app has a tiny `gpu_check`.
+- `space/requirements.txt` is kept minimal in Phase 0; model libraries get added in Phase 1.
 
 ### Phase 1 — Photo editing MVP
 - [ ] `image_fast.py` with FLUX.2 klein 4B: single image + 0–4 references.
@@ -394,7 +402,7 @@ numpy
 
 1. **Hugging Face:** make a free account at huggingface.co, verify your email. (ZeroGPU hosting needs the account to be 30+ days old.)
 2. **Create the Space:** New Space → name `reframe-ai` → SDK **Gradio** → hardware **ZeroGPU** → public.
-3. **Token:** HF Settings → Access Tokens → new token with **write** access. Add it to the GitHub repo as secret `HF_TOKEN` (Settings → Secrets and variables → Actions).
+3. **Token:** HF Settings → Access Tokens → new token with **write** access. Add it to the GitHub repo as secret `HF_TOKEN` (Settings → Secrets and variables → Actions). In the same place, tab **Variables**, add `HF_SPACE_ID` = `your-hf-username/reframe-ai`. Full walkthrough: `docs/SETUP.md`.
 4. **GitHub Pages:** repo Settings → Pages → Source: **GitHub Actions**.
 5. **Licences:** if any model page asks you to accept terms, click accept while logged in.
 6. **Optional:** add a paid provider key as a Space secret for unlimited use.
