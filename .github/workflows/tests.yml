@@ -18,6 +18,12 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Install test dependencies (CPU only, no models)
         run: pip install -r requirements-dev.txt
-      - name: Run tests
+      - name: Run Space tests
         working-directory: space
         run: python -m pytest -q tests
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run website tests
+        working-directory: web
+        run: node --test tests/router.test.mjs

@@ -10,6 +10,28 @@
 
 ---
 
+## ⚠️ Change of plan (15 Nov 2026) — read this first
+
+Hugging Face stopped letting free accounts create Gradio Spaces (July 2026: *"Gradio and Docker Spaces require a paid plan"*; only Static Spaces stay free). The owner's new account can't host its own ZeroGPU Space, and even a 30-day-old account isn't guaranteed to.
+
+**Owner chose option 1:** the website calls **public Spaces that already run the models**, straight from the visitor's browser with `@gradio/client`. No backend of our own, $0.
+
+| Job | Public Space used | Endpoint | Checked |
+|---|---|---|---|
+| Photo | `black-forest-labs/FLUX.2-klein-4B` (official) | `/infer` — `prompt`, `input_images` (list, source first), 4 steps | ✅ edit returned in ~8 s, anonymous |
+| Video | `linyq/KiwiEdit` (Kiwi-Edit authors) | `/run_edit` — `source_video`, `prompt`, `ref_image`, `model_id`, `max_frames`, `steps` (10–50) | ⚠️ asks for ~225 s GPU per call → refused for anonymous visitors; **needs the visitor's free HF token** |
+
+What this means:
+- The site lives in `web/` and is published by GitHub Pages (`.github/workflows/pages.yml`). `web/js/config.js` is the one place that names the Spaces — fix it there if a Space changes or goes offline.
+- Simple edits (brightness, contrast, saturation, B&W, sepia, invert, rotate, flip, crop) run in the browser: instant, unlimited, nothing uploaded.
+- Each visitor uses their **own** daily free GPU time (more if they paste a free HF token on the page).
+- Not possible in this mode yet: video trim/speed/mute, keeping a video's sound, the "HQ" Qwen mode, server-side NSFW image checks (we block by instruction text and rely on the Spaces' own filters).
+- `space/` (our own Gradio Space) is **parked**. If the owner later gets PRO or Hugging Face allows the free ZeroGPU Space again, Phases 1–3 below still apply and `sync-space.yml` deploys it.
+
+Status of option 1: **website built and tested locally (73 tests)**; photo AI path verified against the live Space; publishing waits on making the repo public (free GitHub Pages needs it).
+
+---
+
 ## Table of contents
 1. Ground rules
 2. What the user can do
