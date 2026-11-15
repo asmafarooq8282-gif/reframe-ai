@@ -2,7 +2,7 @@ name: Deploy website (GitHub Pages)
 
 # Publishes the web/ folder as the Reframe AI website.
 # One-time setup: repo Settings → Pages → Source: GitHub Actions.
-# (On a free GitHub account the repo must be public for Pages to work.)
+# (On a free GitHub account the repo must be public for Pages to work. Enabled 15 Nov 2026.)
 
 on:
   push:
