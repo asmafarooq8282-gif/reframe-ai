@@ -15,4 +15,6 @@ Runs on **free open-weight models** through public Hugging Face Spaces, straight
 
 - 🛠️ **[docs/SETUP.md](docs/SETUP.md)** — the one-time account steps for the owner
 
+**Live:** https://asmafarooq8282-gif.github.io/reframe-ai/
+
 **Status:** website built (`web/`). Photo editing works through the official FLUX.2 klein Space; video editing through the Kiwi-Edit Space (needs a free Hugging Face token). See the "Change of plan" box at the top of PLAN.md.

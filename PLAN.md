@@ -28,7 +28,7 @@ What this means:
 - Not possible in this mode yet: video trim/speed/mute, keeping a video's sound, the "HQ" Qwen mode, server-side NSFW image checks (we block by instruction text and rely on the Spaces' own filters).
 - `space/` (our own Gradio Space) is **parked**. If the owner later gets PRO or Hugging Face allows the free ZeroGPU Space again, Phases 1–3 below still apply and `sync-space.yml` deploys it.
 
-Status of option 1: **website built and tested locally (73 tests)**; photo AI path verified against the live Space; publishing waits on making the repo public (free GitHub Pages needs it).
+Status of option 1: **live at https://asmafarooq8282-gif.github.io/reframe-ai/** (15 Nov 2026). Photo AI edit verified end to end on the live site (~15 s). Video needs a visitor token and is not yet tested end to end.
 
 ---
 
