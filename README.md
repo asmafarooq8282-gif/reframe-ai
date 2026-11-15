@@ -7,8 +7,10 @@ Runs on **free open-weight models** through public Hugging Face Spaces, straight
 | Job | Model | Licence |
 |---|---|---|
 | Photo (fast, default) | FLUX.2 [klein] 4B | Apache 2.0 |
+| Photo (best quality) | Qwen-Image-Edit-2511 (Lightning) | Apache 2.0 |
 | Video | Kiwi-Edit 5B (instruction + reference) | MIT |
 | Brightness / contrast / B&W / rotate / flip / crop | in your browser (no AI, unlimited) | — |
+| Video trim / speed / mute, keep original sound | ffmpeg.wasm in your browser | MIT wrapper, GPL-2.0 core (loaded at run time) |
 
 - 📋 **[PLAN.md](PLAN.md)** — full architecture, models, limits, phases and tests
 - 🤖 **[FABLE_PROMPT.md](FABLE_PROMPT.md)** — paste this into Claude Fable 5.2 to build each phase

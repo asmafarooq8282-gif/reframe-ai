@@ -44,8 +44,50 @@ const PHRASES = RULES.flatMap((rule) => rule.words.map((w) => ({ w, rule }))).so
   (a, b) => b.w.length - a.w.length
 );
 
-// Simple video edits we recognise but can't run in the browser yet.
-const VIDEO_TOOL = /\b(trim|cut|shorten|first \d+ ?(s|sec|secs|second|seconds)|last \d+ ?(s|sec|secs|second|seconds)|pehle \d+ ?(second|sec)|speed up|slow down|slow motion|slow-mo|slowmo|\d(\.\d)?x|mute|remove (the )?(audio|sound))\b/;
+// ── Video tools (trim, speed, mute) ─────────────────────────────────────────
+const NUM = "(\\d+(?:\\.\\d+)?)";
+const SEC = "(?:(?:seconds|second|seconday|secs|sec|s)\\b)";
+const VIDEO_FILLER = new Set([...FILLER, "video", "clip", "only", "keep", "the", "to", "from", "first", "trim", "cut", "it", "down", "up", "and", "speed", "audio", "sound", "wala", "wali", "hissa", "rakho", "rakh", "sirf", "bas", "tak", "se"]);
+
+// Each matcher: regex on the normalised clause → op. Order matters (most specific first).
+const VIDEO_MATCHERS = [
+  // trim ranges: "from 2 to 6 seconds", "2s to 6s", "2 se 6 second tak"
+  [new RegExp(`(?:from |between )?${NUM} ?${SEC}? ?(?:to|and|-|se) ?${NUM} ?${SEC}?(?: tak)?`), (m) => ({ op: "trim", start: +m[1], end: +m[2] }), (m, c) => (/\b(trim|cut|keep|from|between|se|tak|seconds?|sec)\b/.test(c) || /\d ?s\b/.test(c)) && +m[2] > +m[1]],
+  // remove the first N seconds: "cut the first 3 seconds", "remove first 2s"
+  [new RegExp(`(?:remove|cut off|cut out|delete|skip|hata(?:o|do)?) (?:the )?(?:first|starting|pehle) ${NUM} ?${SEC}`), (m) => ({ op: "trim", start: +m[1], end: null })],
+  // last N seconds: "last 5 seconds", "aakhri 5 second"
+  [new RegExp(`(?:last|final|aakhri|akhri) ${NUM} ?${SEC}`), (m) => ({ op: "trim", last: +m[1] })],
+  // first N seconds: "first 5 seconds", "trim to 5 seconds", "pehle 5 second", "5 second ka"
+  [new RegExp(`(?:first|pehle|starting|initial) ${NUM} ?${SEC}`), (m) => ({ op: "trim", start: 0, end: +m[1] })],
+  [new RegExp(`(?:trim|cut|shorten|make it|keep)(?: it)?(?: down)? to ${NUM} ?${SEC}`), (m) => ({ op: "trim", start: 0, end: +m[1] })],
+  [new RegExp(`^${NUM} ?${SEC}(?: ka| ki| only| long)?$`), (m) => ({ op: "trim", start: 0, end: +m[1] })],
+  // speed
+  [new RegExp(`${NUM} ?(?:x|times)(?: (?:speed|faster|tez))?`), (m) => ({ op: "speed", factor: +m[1] })],
+  [/\b(half speed|slow motion|slow-mo|slowmo|slow mo|slow it down|slow down|slower|slow|ahista|aahista|dheere|dheema)\b/, () => ({ op: "speed", factor: 0.5 })],
+  [/\b(double speed|speed it up|speed up|faster|fast forward|tez)\b/, () => ({ op: "speed", factor: 2 })],
+  // mute
+  [/\b(mute|remove (?:the )?(?:audio|sound|music)|no (?:audio|sound)|without (?:audio|sound)|silent|awaaz (?:band|hata\w*|khatam)|awaz (?:band|hata\w*|khatam))\b/, () => ({ op: "mute" })],
+];
+
+/** Returns a video tool op for the clause, or null if it needs AI. */
+export function classifyVideoClause(rawClause) {
+  const clause = normalise(rawClause).replace(/(\d)\s+(?=x\b)/g, "$1");
+  if (!clause) return null;
+  for (const [re, make, guard] of VIDEO_MATCHERS) {
+    const m = clause.match(re);
+    if (!m) continue;
+    if (guard && !guard(m, clause)) continue;
+    const op = make(m);
+    if (op.op === "speed" && !(op.factor >= 0.1 && op.factor <= 16)) return null;
+    if (op.op === "trim" && op.end != null && !(op.end > (op.start ?? 0))) return null;
+    const rest = clause
+      .replace(m[0], " ")
+      .split(/\s+/)
+      .filter((w) => w && !VIDEO_FILLER.has(w) && !/^\d+(\.\d+)?$/.test(w) && !new RegExp(`^${SEC}$`).test(w));
+    return rest.length ? null : op;
+  }
+  return null;
+}
 
 const BLOCKED = /\b(nude|nudity|naked|nsfw|undress\w*|topless|porn\w*|sexual\w*|sexy|erotic\w*|strip (her|him|them|me)|stripped|stripping|lingerie|without (any )?clothes|no clothes|remove (\w+ ){0,2}cloth\w*|see[- ]?through)\b/;
 const FACE_SWAP = /\b(face ?swap|swap (\w+ ){0,2}faces?|replace (\w+ ){0,2}face|put (\w+ ){0,3}face on|deepfake)\b/;
@@ -57,7 +99,8 @@ function escapeRegExp(s) {
 function normalise(text) {
   return String(text || "")
     .toLowerCase()
-    .replace(/[“”"'’.!?]/g, " ")
+    .replace(/[“”"'’!?]/g, " ")
+    .replace(/(?<!\d)\.|\.(?!\d)/g, " ") // keep decimal points like 1.5
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -134,24 +177,11 @@ export function route({ kind, instruction, referenceCount = 0 }) {
 
   const aiParts = [];
   for (const clause of splitClauses(text)) {
-    const op = kind === "photo" ? classifyClause(clause) : null;
+    const op = kind === "photo" ? classifyClause(clause) : classifyVideoClause(clause);
     if (op) result.classicOps.push(op);
     else aiParts.push(clause);
   }
-
-  if (kind === "video") {
-    const tools = aiParts.filter((c) => VIDEO_TOOL.test(normalise(c)));
-    if (tools.length) {
-      result.notes.push("Simple video tools (trim, speed, mute) aren't built yet. Trim the clip on your phone first, then upload it.");
-      if (tools.length === aiParts.length && referenceCount === 0) {
-        result.error = { code: "not_built", message: result.notes[0] };
-        return result;
-      }
-    }
-    result.aiInstruction = aiParts.filter((c) => !VIDEO_TOOL.test(normalise(c))).join(", ");
-  } else {
-    result.aiInstruction = aiParts.join(", ");
-  }
+  result.aiInstruction = aiParts.join(", ");
 
   if (!result.aiInstruction && referenceCount > 0) {
     if (result.classicOps.length === 0 || kind === "video") {

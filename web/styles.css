@@ -97,6 +97,8 @@ textarea:focus, input:focus-visible, button:focus-visible { outline: 2px solid v
 
 .consent, .inline { display: flex; gap: 10px; align-items: flex-start; color: var(--muted); font-size: 0.9rem; }
 .consent { margin: 4px 0 14px; }
+.quality { margin-top: 12px; }
+.quality strong { color: var(--text); }
 .consent input, .inline input { margin-top: 3px; width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
 
 .primary {

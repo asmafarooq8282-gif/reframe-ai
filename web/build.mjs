@@ -2,7 +2,7 @@
 // Used for testing in a browser and for sharing as a single file.
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 
-const order = ["config", "pixels", "router", "classic", "ai", "app"];
+const order = ["config", "pixels", "router", "videoplan", "classic", "ai", "video", "app"];
 const strip = (src) =>
   src
     .replace(/^import [^;]+;\s*$/gm, "")

@@ -38,6 +38,10 @@
         <h2><span class="num">2</span> How should it be edited?</h2>
         <textarea id="instruction" rows="2" placeholder="e.g. make it a golden sunset · turn it into anime · make it brighter and crop to square"></textarea>
         <div class="chips" id="presets" aria-label="Quick ideas"></div>
+        <label class="inline quality" id="quality-wrap">
+          <input type="checkbox" id="quality">
+          <span><strong>Best quality</strong> — uses the bigger Qwen-Image-Edit model. Better at keeping faces and details, but slower and uses more of your free AI time.</span>
+        </label>
       </div>
 
       <div class="step">
@@ -79,15 +83,15 @@
 
     <details class="card more">
       <summary>More free edits</summary>
-      <p>The AI runs on free Hugging Face servers. Without an account each person gets about 2 minutes of AI time a day; with a free Hugging Face account it's about 5 minutes. Simple edits (brightness, contrast, black and white, rotate, flip, crop) run on your device and are unlimited.</p>
+      <p>The AI runs on free Hugging Face servers. Without an account each person gets about 2 minutes of AI time a day; with a free Hugging Face account it's about 5 minutes. Simple edits (brightness, contrast, black and white, rotate, flip, crop, and video trim, speed and mute) run on your device and are unlimited.</p>
       <p>To use your own account's allowance, create a free token at <strong>huggingface.co → Settings → Access Tokens</strong> (type “Read”) and paste it here. It stays in this tab only and is sent only to Hugging Face.</p>
       <input id="token" type="password" autocomplete="off" placeholder="hf_…" aria-label="Hugging Face token (optional)">
     </details>
 
     <details class="card more">
       <summary>How it works and privacy</summary>
-      <p>Photo edits use <strong>FLUX.2 [klein] 4B</strong> and video edits use <strong>Kiwi-Edit</strong>, both open models, running on public Hugging Face Spaces operated by the model makers. When you ask for an AI edit, your files are sent to those Spaces. Simple edits never leave your device. Nothing is stored by this site.</p>
-      <p>Videos: up to 5 seconds works best. Each video edit uses about 4 minutes of AI time, so it needs a free Hugging Face token and uses most of a day's free allowance.</p>
+      <p>Photo edits use <strong>FLUX.2 [klein] 4B</strong> (or <strong>Qwen-Image-Edit-2511</strong> in Best quality mode) and video edits use <strong>Kiwi-Edit</strong>, all open models, running on public Hugging Face Spaces. When you ask for an AI edit, your files are sent to those Spaces. Simple edits — including video trim, speed and mute, done with ffmpeg.wasm — never leave your device. Nothing is stored by this site.</p>
+      <p>Videos: the AI edits up to 5 seconds (longer clips are trimmed first) and puts your original sound back afterwards. Each AI video edit uses about 4 minutes of AI time, so it needs a free Hugging Face token. The first time you use a video tool, your browser downloads about 30 MB of video software.</p>
     </details>
   </main>
 

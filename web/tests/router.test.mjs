@@ -141,22 +141,65 @@ test("ordinary requests are not blocked", () => {
 });
 
 // ── video ───────────────────────────────────────────────────────────────────
-test("video: style edit goes to AI, never classic", () => {
+test("video: style edit goes to AI (photo colour tools are photo-only)", () => {
   const r = video("make it brighter");
   assert.deepEqual(r.classicOps, []);
   assert.equal(r.aiInstruction, "make it brighter");
 });
 
-test("video: trim-only request explains it isn't built yet", () => {
-  assert.equal(video("trim to first 3 seconds").error.code, "not_built");
-  assert.equal(video("pehle 5 second").error.code, "not_built");
+// video tools: trim / speed / mute (run on the device with ffmpeg.wasm)
+const VIDEO_TOOLS = [
+  ["trim to first 3 seconds", { op: "trim", start: 0, end: 3 }],
+  ["keep only the first 4 seconds", { op: "trim", start: 0, end: 4 }],
+  ["cut it to 5 sec", { op: "trim", start: 0, end: 5 }],
+  ["5 seconds", { op: "trim", start: 0, end: 5 }],
+  ["pehle 5 second", { op: "trim", start: 0, end: 5 }],
+  ["from 2 to 6 seconds", { op: "trim", start: 2, end: 6 }],
+  ["2s to 6s", { op: "trim", start: 2, end: 6 }],
+  ["from 1.5 to 3.5 sec", { op: "trim", start: 1.5, end: 3.5 }],
+  ["2 se 6 second tak", { op: "trim", start: 2, end: 6 }],
+  ["last 4 seconds", { op: "trim", last: 4 }],
+  ["aakhri 3 second rakho", { op: "trim", last: 3 }],
+  ["remove the first 2 seconds", { op: "trim", start: 2, end: null }],
+  ["2x", { op: "speed", factor: 2 }],
+  ["1.5x", { op: "speed", factor: 1.5 }],
+  ["make it 3x faster", { op: "speed", factor: 3 }],
+  ["speed it up", { op: "speed", factor: 2 }],
+  ["slow motion", { op: "speed", factor: 0.5 }],
+  ["isko slow karo", { op: "speed", factor: 0.5 }],
+  ["mute", { op: "mute" }],
+  ["remove the sound", { op: "mute" }],
+  ["awaaz band karo", { op: "mute" }],
+];
+
+for (const [text, expected] of VIDEO_TOOLS) {
+  test(`video tool: "${text}"`, () => {
+    const r = video(text);
+    assert.equal(r.error, undefined);
+    assert.equal(r.aiInstruction, "");
+    assert.deepEqual(r.classicOps, [expected]);
+  });
+}
+
+test("video: tool + style → tool on device, style to AI", () => {
+  const r = video("trim to first 3 seconds and make it snowy");
+  assert.deepEqual(r.classicOps, [{ op: "trim", start: 0, end: 3 }]);
+  assert.equal(r.aiInstruction, "make it snowy");
 });
 
-test("video: trim + style keeps the style part and adds a note", () => {
-  const r = video("trim to first 3 seconds and make it snowy");
-  assert.equal(r.error, undefined);
-  assert.equal(r.aiInstruction, "make it snowy");
-  assert.equal(r.notes.length, 1);
+test("video: several tools in one go", () => {
+  const r = video("first 4 seconds, 2x, mute");
+  assert.deepEqual(r.classicOps.map((o) => o.op), ["trim", "speed", "mute"]);
+  assert.equal(r.aiInstruction, "");
+});
+
+test("video: sentences that only mention numbers stay with the AI", () => {
+  assert.equal(video("me and my 2 friends dancing in the rain").classicOps.length, 0);
+  assert.equal(video("first 3 seconds of snow falling").classicOps.length, 0);
+});
+
+test("video: silly speeds are refused", () => {
+  assert.equal(video("100x").classicOps.length, 0);
 });
 
 // ── prompts ─────────────────────────────────────────────────────────────────
@@ -231,4 +274,43 @@ test("grayscale makes channels equal; invert flips", () => {
 test("cropRect centres the crop", () => {
   assert.deepEqual(px.cropRect(1000, 500, [1, 1]), { x: 250, y: 0, width: 500, height: 500 });
   assert.deepEqual(px.cropRect(900, 1600, [16, 9]), { x: 0, y: 547, width: 900, height: 506 });
+});
+
+// ── ffmpeg command building ─────────────────────────────────────────────────
+import { buildFfmpegArgs, audioTempoChain, summarise } from "../js/videoplan.js";
+
+test("audioTempoChain splits big changes into allowed steps", () => {
+  assert.equal(audioTempoChain(2), "atempo=2");
+  assert.equal(audioTempoChain(0.5), "atempo=0.5");
+  assert.equal(audioTempoChain(4), "atempo=2,atempo=2");
+  assert.equal(audioTempoChain(0.25), "atempo=0.5,atempo=0.5");
+  assert.equal(audioTempoChain(3), "atempo=2,atempo=1.5");
+});
+
+test("summarise merges ops", () => {
+  assert.deepEqual(summarise([{ op: "trim", start: 1, end: 4 }, { op: "speed", factor: 2 }, { op: "mute" }]), { start: 1, end: 4, fromEnd: null, speed: 2, mute: true });
+});
+
+test("ffmpeg args: trim range", () => {
+  const a = buildFfmpegArgs("in.mp4", "out.mp4", [{ op: "trim", start: 2, end: 6 }]);
+  assert.deepEqual(a.slice(0, 7), ["-hide_banner", "-ss", "2", "-i", "in.mp4", "-t", "4"]);
+  assert.ok(a.includes("aac") && a.at(-1) === "out.mp4");
+});
+
+test("ffmpeg args: last N seconds uses -sseof", () => {
+  const a = buildFfmpegArgs("in.mp4", "out.mp4", [{ op: "trim", last: 3 }]);
+  assert.deepEqual(a.slice(0, 5), ["-hide_banner", "-sseof", "-3", "-i", "in.mp4"]);
+  assert.ok(!a.includes("-t"));
+});
+
+test("ffmpeg args: speed changes picture and sound together", () => {
+  const a = buildFfmpegArgs("in.mp4", "out.mp4", [{ op: "speed", factor: 2 }]);
+  assert.ok(a[a.indexOf("-vf") + 1].startsWith("setpts=PTS/2"));
+  assert.equal(a[a.indexOf("-af") + 1], "atempo=2");
+});
+
+test("ffmpeg args: mute or no audio drops the sound", () => {
+  assert.ok(buildFfmpegArgs("i", "o", [{ op: "mute" }]).includes("-an"));
+  const silent = buildFfmpegArgs("i", "o", [{ op: "speed", factor: 2 }], false);
+  assert.ok(silent.includes("-an") && !silent.includes("-af"));
 });

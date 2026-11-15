@@ -4,7 +4,8 @@
 import { PHOTO, VIDEO, LIMITS } from "./config.js";
 import { route, buildPhotoPrompt, buildVideoPrompt, outputSize, friendlyError, PRESETS } from "./router.js";
 import { fileToCanvas, shrink, applyOps, canvasToBlob, addLabel, videoDuration, videoFrames } from "./classic.js";
-import { editPhoto, editVideo } from "./ai.js";
+import { editPhoto, editPhotoHQ, editVideo } from "./ai.js";
+import { applyVideoOps, trimTo, addOriginalAudio } from "./video.js";
 
 const $ = (id) => document.getElementById(id);
 const el = {
@@ -17,7 +18,7 @@ const el = {
   result: $("result"), compare: $("compare"), beforeImg: $("before-img"), afterImg: $("after-img"),
   slider: $("slider"), plainImg: $("plain-img"), resultVideo: $("result-video"), resultNote: $("result-note"),
   download: $("download"), addLabel: $("add-label"), labelWrap: $("label-wrap"), again: $("again"),
-  token: $("token"),
+  token: $("token"), quality: $("quality"), qualityWrap: $("quality-wrap"),
 };
 
 const state = {
@@ -59,13 +60,14 @@ function setKind(kind) {
   el.sourceHint.textContent = photo ? "Tap to choose a photo, or drop one here" : "Tap to choose a short video, or drop one here";
   el.sourceLimit.textContent = photo
     ? "JPG, PNG or WebP, up to 20 MB."
-    : `MP4, MOV or WebM, up to ${VIDEO.maxSeconds} seconds and 100 MB. Video edits take a few minutes and need a free Hugging Face token (see "More free edits" below).`;
+    : `MP4, MOV or WebM, up to 200 MB. Trim, speed and mute work instantly on your device. AI video edits use the first ${VIDEO.maxSeconds} seconds, take a few minutes and need a free Hugging Face token (see "More free edits" below).`;
   el.refHint.textContent = photo
     ? "Add up to 3 photos (or a video) to copy the look from"
     : "Add a photo (or a video) to copy the look from";
   el.instruction.placeholder = photo
     ? "e.g. make it a golden sunset · turn it into anime · make it brighter and crop to square"
-    : "e.g. make it a snowy day · turn it into a watercolour painting";
+    : "e.g. make it a snowy day · first 5 seconds · 2x · mute · trim to 4 seconds and turn it into anime";
+  el.qualityWrap.hidden = !photo;
   setSource(null);
   setRefs([]);
   setStatus("");
@@ -211,6 +213,7 @@ async function runPhoto(plan) {
   const original = await fileToCanvas(state.source);
   let canvas = applyOps(original, plan.classicOps);
   let usedAI = false;
+  let modelName = "FLUX.2 klein";
 
   if (plan.aiInstruction) {
     requireConsent();
@@ -218,7 +221,7 @@ async function runPhoto(plan) {
     const upload = shrink(canvas, PHOTO.uploadMaxSide);
     const refs = await referenceImages(PHOTO.maxReferences);
     const size = outputSize(upload.width, upload.height, PHOTO.outputLongSide);
-    const blob = await editPhoto({
+    const request = {
       sourceBlob: await canvasToBlob(upload, "image/jpeg", 0.92),
       referenceBlobs: refs,
       prompt: buildPhotoPrompt(plan.aiInstruction, refs.length),
@@ -226,43 +229,85 @@ async function runPhoto(plan) {
       token: token(),
       onStatus: (msg) => {
         const text = statusText(msg, "photo");
-        if (text) setStatus(text, "busy");
+        if (text) setStatus(el.quality.checked ? `${text} (best quality is slower)` : text, "busy");
       },
-    });
+    };
+    let blob;
+    if (el.quality.checked) {
+      const result = await editPhotoHQ(request);
+      blob = result.blob;
+      modelName = result.modelName;
+    } else {
+      blob = await editPhoto(request);
+    }
     canvas = await fileToCanvas(blob);
     usedAI = true;
   }
 
   const blob = await canvasToBlob(canvas, "image/png");
   const sameShape = Math.abs(original.width / original.height - canvas.width / canvas.height) < 0.02;
-  showResult({ kind: "photo", blob, canvas, usedAI, beforeBlob: sameShape ? await canvasToBlob(original, "image/jpeg", 0.9) : null });
+  showResult({ kind: "photo", blob, canvas, usedAI, modelName, beforeBlob: sameShape ? await canvasToBlob(original, "image/jpeg", 0.9) : null });
 }
 
 async function runVideo(plan) {
-  requireConsent();
-  if (VIDEO.needsToken && !token()) {
-    el.token.closest("details").open = true;
-    el.token.focus();
-    throw fail("needs_token", "Video edits need a free Hugging Face token (they use about 4 minutes of AI time each). Paste one in the box below — it takes a minute to make.");
+  const progress = (text) => setStatus(text, "busy");
+  const needsAI = Boolean(plan.aiInstruction);
+  if (needsAI) {
+    requireConsent();
+    if (VIDEO.needsToken && !token()) {
+      el.token.closest("details").open = true;
+      el.token.focus();
+      throw fail("needs_token", "AI video edits need a free Hugging Face token (they use about 4 minutes of AI time each). Paste one in the box below — it takes a minute to make. Trim, speed and mute work without one.");
+    }
   }
-  setStatus("Checking your video…", "busy");
-  const seconds = await videoDuration(state.source);
-  if (Number.isFinite(seconds) && seconds > VIDEO.maxSeconds + 0.5) {
-    throw fail("video_too_long", `That video is ${Math.round(seconds)} seconds long. Trim it to ${VIDEO.maxSeconds} seconds or less (your phone's gallery can do this), then try again.`);
+
+  let working = state.source;
+  const notes = [];
+  const muted = plan.classicOps.some((op) => op.op === "mute");
+
+  // 1. Simple tools first, on the device.
+  if (plan.classicOps.length) {
+    working = await applyVideoOps(working, plan.classicOps, progress);
   }
-  const [reference] = await referenceImages(1);
-  setStatus("Sending to the AI. Video edits take a few minutes — keep this tab open…", "busy");
-  const blob = await editVideo({
-    videoFile: state.source,
-    referenceBlob: reference || null,
-    prompt: buildVideoPrompt(plan.aiInstruction, Boolean(reference)),
-    token: token(),
-    onStatus: (msg) => {
-      const text = statusText(msg, "video");
-      if (text) setStatus(text, "busy");
-    },
-  });
-  showResult({ kind: "video", blob, usedAI: true });
+
+  // 2. AI edit, on a clip short enough for the free AI.
+  if (needsAI) {
+    setStatus("Checking your video…", "busy");
+    const seconds = await videoDuration(working);
+    if (Number.isFinite(seconds) && seconds > VIDEO.maxSeconds + 0.5) {
+      working = await trimTo(working, VIDEO.maxSeconds, progress);
+      notes.push(`The AI edited the first ${VIDEO.maxSeconds} seconds (the free AI can't do longer clips).`);
+    }
+    const [reference] = await referenceImages(1);
+    setStatus("Sending to the AI. Video edits take a few minutes — keep this tab open…", "busy");
+    const aiBlob = await editVideo({
+      videoFile: working,
+      referenceBlob: reference || null,
+      prompt: buildVideoPrompt(plan.aiInstruction, Boolean(reference)),
+      token: token(),
+      onStatus: (msg) => {
+        const text = statusText(msg, "video");
+        if (text) progress(text);
+      },
+    });
+    let edited = new File([aiBlob], "reframe-ai.mp4", { type: aiBlob.type || "video/mp4" });
+
+    // 3. Put the original sound back (the AI returns a silent video).
+    if (!muted) {
+      try {
+        const { file, hadAudio } = await addOriginalAudio(edited, working, progress);
+        edited = file;
+        if (hadAudio) notes.push("Original sound added back.");
+      } catch (error) {
+        console.warn("[Reframe] could not add sound", error);
+        notes.push("The original sound couldn't be added back, so the video is silent.");
+      }
+    }
+    working = edited;
+  }
+
+  showResult({ kind: "video", blob: working, usedAI: needsAI, notes });
+  return notes;
 }
 
 async function go() {
@@ -280,9 +325,8 @@ async function go() {
   el.go.disabled = true;
   el.go.textContent = "Editing…";
   try {
-    if (state.kind === "photo") await runPhoto(plan);
-    else await runVideo(plan);
-    setStatus(["Done.", ...plan.notes].join(" "), "ok");
+    const extra = state.kind === "photo" ? await runPhoto(plan) : await runVideo(plan);
+    setStatus(["Done.", ...plan.notes, ...(extra || [])].join(" "), "ok");
   } catch (error) {
     console.error("[Reframe]", error);
     const shown = error.friendly || error.code === "unsupported_format" ? error : friendlyError(error);
@@ -311,22 +355,22 @@ function showResult(output) {
   if (output.kind === "video") {
     el.resultVideo.src = url;
     el.resultVideo.hidden = false;
-    el.resultNote.textContent = "Edited by AI (Kiwi-Edit). The sound from your original video isn't kept yet.";
+    el.resultNote.textContent = [output.usedAI ? "Edited by AI (Kiwi-Edit)." : "Edited on your device — no AI time used.", ...(output.notes || [])].join(" ");
   } else if (output.beforeBlob) {
     el.beforeImg.src = objectUrl(output.beforeBlob);
     el.afterImg.src = url;
     el.slider.value = 50;
     el.compare.style.setProperty("--pos", "50%");
     el.compare.hidden = false;
-    el.resultNote.textContent = output.usedAI ? "Drag across the picture to compare. Edited by AI (FLUX.2 klein)." : "Drag across the picture to compare. Edited on your device — no AI time used.";
+    el.resultNote.textContent = output.usedAI ? `Drag across the picture to compare. Edited by AI (${output.modelName}).` : "Drag across the picture to compare. Edited on your device — no AI time used.";
   } else {
     el.plainImg.src = url;
     el.plainImg.hidden = false;
-    el.resultNote.textContent = output.usedAI ? "Edited by AI (FLUX.2 klein)." : "Edited on your device — no AI time used.";
+    el.resultNote.textContent = output.usedAI ? `Edited by AI (${output.modelName}).` : "Edited on your device — no AI time used.";
   }
   el.labelWrap.hidden = !(output.kind === "photo" && output.usedAI);
   el.addLabel.checked = false;
-  el.again.hidden = output.kind !== "photo";
+  el.again.hidden = false;
   el.result.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
@@ -349,8 +393,9 @@ el.download.addEventListener("click", async () => {
 });
 
 el.again.addEventListener("click", () => {
-  if (!state.output || state.output.kind !== "photo" || state.busy) return;
-  setSource(new File([state.output.blob], "reframe-result.png", { type: "image/png" }));
+  if (!state.output || state.busy) return;
+  const isVideo = state.output.kind === "video";
+  setSource(new File([state.output.blob], isVideo ? "reframe-result.mp4" : "reframe-result.png", { type: isVideo ? "video/mp4" : "image/png" }));
   el.instruction.value = "";
   el.instruction.focus();
   el.editor.scrollIntoView({ behavior: "smooth" });

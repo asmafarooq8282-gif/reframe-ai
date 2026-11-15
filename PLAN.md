@@ -25,7 +25,11 @@ What this means:
 - The site lives in `web/` and is published by GitHub Pages (`.github/workflows/pages.yml`). `web/js/config.js` is the one place that names the Spaces — fix it there if a Space changes or goes offline.
 - Simple edits (brightness, contrast, saturation, B&W, sepia, invert, rotate, flip, crop) run in the browser: instant, unlimited, nothing uploaded.
 - Each visitor uses their **own** daily free GPU time (more if they paste a free HF token on the page).
-- Not possible in this mode yet: video trim/speed/mute, keeping a video's sound, the "HQ" Qwen mode, server-side NSFW image checks (we block by instruction text and rely on the Spaces' own filters).
+- **Added 15 Nov 2026:**
+  - Video trim / speed / mute run in the browser with **ffmpeg.wasm** (wrapper vendored in `web/vendor/ffmpeg/`, MIT; the ~32 MB core, GPL-2.0, loads from jsDelivr only when a video tool is first used). Router understands e.g. "first 5 seconds", "from 2 to 6 sec", "last 3 seconds", "2x", "slow motion", "mute", "pehle 5 second", "awaaz band karo".
+  - Long videos are trimmed to 5 s automatically before AI editing, and the **original sound is put back** on the AI result (ffmpeg re-mux).
+  - **Best quality** photo toggle: `linoyts/Qwen-Image-Edit-2511-Fast` (Qwen 2511, 4-step Lightning, Apache 2.0), falling back to FLUX.2 klein Base (50 steps) if that Space is down. API schema checked; not yet run end to end (test quota ran out — verify on next session).
+- Still not possible in this mode: server-side NSFW image checks (we block by instruction text and rely on the Spaces' own filters).
 - `space/` (our own Gradio Space) is **parked**. If the owner later gets PRO or Hugging Face allows the free ZeroGPU Space again, Phases 1–3 below still apply and `sync-space.yml` deploys it.
 
 Status of option 1: **live at https://asmafarooq8282-gif.github.io/reframe-ai/** (15 Nov 2026). Photo AI edit verified end to end on the live site (~15 s). Video needs a visitor token and is not yet tested end to end.
