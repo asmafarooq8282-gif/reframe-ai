@@ -41,6 +41,13 @@ jobs:
           cp web/index.html web/styles.css _site/
           cp -r web/js _site/js
           cp -r web/vendor _site/vendor
+      - name: Stamp a version on scripts so browsers don't use old cached copies
+        run: |
+          V="${GITHUB_SHA::8}"
+          sed -i "s#src=\"js/app.js\"#src=\"js/app.js?v=$V\"#; s#href=\"styles.css\"#href=\"styles.css?v=$V\"#" _site/index.html
+          sed -i -E "s#(from \"\./[a-z]+\.js)\"#\1?v=$V\"#g" _site/js/*.js
+          grep -o 'app.js?v=[a-f0-9]*' _site/index.html
+          grep -ho 'from "./[a-z]*.js?v=[a-f0-9]*"' _site/js/*.js | sort -u
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
