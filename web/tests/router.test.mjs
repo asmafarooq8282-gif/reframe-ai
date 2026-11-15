@@ -293,7 +293,7 @@ test("summarise merges ops", () => {
 
 test("ffmpeg args: trim range", () => {
   const a = buildFfmpegArgs("in.mp4", "out.mp4", [{ op: "trim", start: 2, end: 6 }]);
-  assert.deepEqual(a.slice(0, 7), ["-hide_banner", "-ss", "2", "-i", "in.mp4", "-t", "4"]);
+  assert.deepEqual(a.slice(0, 7), ["-hide_banner", "-ss", "2", "-t", "4", "-i", "in.mp4"]);
   assert.ok(a.includes("aac") && a.at(-1) === "out.mp4");
 });
 
@@ -301,6 +301,11 @@ test("ffmpeg args: last N seconds uses -sseof", () => {
   const a = buildFfmpegArgs("in.mp4", "out.mp4", [{ op: "trim", last: 3 }]);
   assert.deepEqual(a.slice(0, 5), ["-hide_banner", "-sseof", "-3", "-i", "in.mp4"]);
   assert.ok(!a.includes("-t"));
+});
+
+test("ffmpeg args: trim + speed measures the trim on the original", () => {
+  const a = buildFfmpegArgs("in.mp4", "out.mp4", [{ op: "trim", start: 1, end: 3 }, { op: "speed", factor: 2 }]);
+  assert.ok(a.indexOf("-t") < a.indexOf("-i"));
 });
 
 test("ffmpeg args: speed changes picture and sound together", () => {

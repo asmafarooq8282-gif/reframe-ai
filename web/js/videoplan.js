@@ -47,8 +47,9 @@ export function buildFfmpegArgs(input, output, ops, hasAudio = true) {
   const args = ["-hide_banner"];
   if (fromEnd != null) args.push("-sseof", `-${fromEnd}`);
   else if (start > 0) args.push("-ss", String(start));
+  // -t BEFORE -i: the length is measured on the original video, not the sped-up output.
+  if (fromEnd == null && end != null) args.push("-t", String(Math.max(0.1, +(end - start).toFixed(3))));
   args.push("-i", input);
-  if (fromEnd == null && end != null) args.push("-t", String(Math.max(0.1, end - start)));
 
   const vf = ["scale=trunc(iw/2)*2:trunc(ih/2)*2"]; // H.264 needs even sizes
   if (speed !== 1) vf.unshift(`setpts=PTS/${speed}`);
